@@ -3,12 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from src.infrastructure import photo_time
 from src.infrastructure.photo_time import (
     read_photo_timestamps,
     scan_photo_files,
-    set_created_time,
-    set_modified_time,
-    set_taken_time,
     supports_created_time_write,
     supports_taken_time_write,
 )
@@ -17,6 +15,30 @@ from src.models.time_shift import (
     TimeShiftExecutionResult,
     TimeShiftPreviewRecord,
     TimeShiftRequest,
+)
+
+TIME_UPDATE_OPERATIONS = (
+    (
+        "update_taken_at",
+        "after_taken_at",
+        "拍摄时间已写入",
+        "拍摄时间失败",
+        "set_taken_time",
+    ),
+    (
+        "update_modified_at",
+        "after_modified_at",
+        "修改时间已写入",
+        "修改时间失败",
+        "set_modified_time",
+    ),
+    (
+        "update_created_at",
+        "after_created_at",
+        "创建时间已写入",
+        "创建时间失败",
+        "set_created_time",
+    ),
 )
 
 
@@ -82,64 +104,30 @@ def execute_time_shift(
         messages: list[str] = []
         errors: list[str] = []
 
-        _apply_time_update(
-            should_update=request.update_taken_at,
-            value=preview_record.after_taken_at,
-            path=path,
-            success_message="拍摄时间已写入",
-            failure_prefix="拍摄时间失败",
-            writer=set_taken_time,
-            messages=messages,
-            errors=errors,
-        )
-        _apply_time_update(
-            should_update=request.update_modified_at,
-            value=preview_record.after_modified_at,
-            path=path,
-            success_message="修改时间已写入",
-            failure_prefix="修改时间失败",
-            writer=set_modified_time,
-            messages=messages,
-            errors=errors,
-        )
-        _apply_time_update(
-            should_update=request.update_created_at,
-            value=preview_record.after_created_at,
-            path=path,
-            success_message="创建时间已写入",
-            failure_prefix="创建时间失败",
-            writer=set_created_time,
-            messages=messages,
-            errors=errors,
-        )
+        for (
+            should_update_attr,
+            value_attr,
+            success_message,
+            failure_prefix,
+            writer_name,
+        ) in TIME_UPDATE_OPERATIONS:
+            _apply_time_update(
+                should_update=getattr(request, should_update_attr),
+                value=getattr(preview_record, value_attr),
+                path=path,
+                success_message=success_message,
+                failure_prefix=failure_prefix,
+                writer=getattr(photo_time, writer_name),
+                messages=messages,
+                errors=errors,
+            )
 
-        if errors and messages:
-            execution_records.append(
-                TimeShiftExecutionRecord(
-                    path=path,
-                    status="部分成功",
-                    message="；".join(messages + errors),
-                )
-            )
-            failed += 1
-        elif errors:
-            execution_records.append(
-                TimeShiftExecutionRecord(
-                    path=path,
-                    status="失败",
-                    message="；".join(errors),
-                )
-            )
-            failed += 1
-        else:
-            execution_records.append(
-                TimeShiftExecutionRecord(
-                    path=path,
-                    status="成功",
-                    message="；".join(messages) or "已按预览结果完成写入。",
-                )
-            )
+        execution_record = _build_execution_record(path, messages, errors)
+        execution_records.append(execution_record)
+        if execution_record.status == "成功":
             succeeded += 1
+        else:
+            failed += 1
 
     return TimeShiftExecutionResult(
         total=len(request.paths),
@@ -213,6 +201,30 @@ def _build_preview_record(
         after_taken_at=after_taken_at,
         status=status,
         message=message,
+    )
+
+
+def _build_execution_record(
+    path: Path,
+    messages: list[str],
+    errors: list[str],
+) -> TimeShiftExecutionRecord:
+    if errors and messages:
+        return TimeShiftExecutionRecord(
+            path=path,
+            status="部分成功",
+            message="；".join(messages + errors),
+        )
+    if errors:
+        return TimeShiftExecutionRecord(
+            path=path,
+            status="失败",
+            message="；".join(errors),
+        )
+    return TimeShiftExecutionRecord(
+        path=path,
+        status="成功",
+        message="；".join(messages) or "已按预览结果完成写入。",
     )
 
 

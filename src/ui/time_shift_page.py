@@ -75,9 +75,7 @@ class TimeShiftPage(QWidget):
                 "按“选择输入 -> 配置偏移 -> 生成预览 -> 二次确认 -> 执行”的流程工作。"
             )
         )
-        layout.addWidget(
-            QLabel("支持按当前预览结果批量写入照片时间信息。")
-        )
+        layout.addWidget(QLabel("支持按当前预览结果批量写入照片时间信息。"))
         return box
 
     def _build_controls(self) -> QGroupBox:
@@ -308,17 +306,7 @@ class TimeShiftPage(QWidget):
             )
             return
 
-        request = build_time_shift_request(
-            selected_files=self.selected_files,
-            selected_directory=self.selected_directory,
-            offset_days=self.days_spin.value(),
-            offset_hours=self.hours_spin.value(),
-            offset_minutes=self.minutes_spin.value(),
-            offset_seconds=self.seconds_spin.value(),
-            update_created_at=self.update_created_checkbox.isChecked(),
-            update_modified_at=self.update_modified_checkbox.isChecked(),
-            update_taken_at=self.update_taken_checkbox.isChecked(),
-        )
+        request = self._build_request()
         if not request.paths:
             self._clear_preview("状态：未找到可处理照片")
             show_warning(self, "未找到照片", "所选文件夹中没有可处理的照片文件。")
@@ -326,30 +314,15 @@ class TimeShiftPage(QWidget):
 
         self.last_request = request
         self.preview_records = generate_preview(request)
-        rows = [self._record_to_row(record) for record in self.preview_records]
-        self.preview_table.setRowCount(len(rows))
-
-        for row_index, row_values in enumerate(rows):
-            for column_index, value in enumerate(row_values):
-                item = QTableWidgetItem(value)
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.preview_table.setItem(row_index, column_index, item)
-
         self.preview_ready = True
         executable_count, blocked_count = self._preview_counts()
+        self._populate_preview_table(self.preview_records)
         self.preview_summary_label.setText(
-            f"已生成 {len(rows)} 条预览记录，"
-            f"可执行 {executable_count} 条，不可执行 {blocked_count} 条。"
+            self._preview_summary_text(executable_count, blocked_count)
         )
         self.status_label.setText("状态：预览已生成，等待确认执行")
         self.result_text.setPlainText(
-            "预览完成\n"
-            f"- 输入来源：{self._input_description()}\n"
-            f"- 偏移量：{self._offset_description()}\n"
-            f"- 修改字段：{self._field_description()}\n"
-            f"- 可执行：{executable_count}\n"
-            f"- 不可执行：{blocked_count}\n"
-            "- 执行阶段会逐文件处理，失败项不会中断整个任务。"
+            self._preview_result_text(executable_count, blocked_count)
         )
         self._refresh_actions()
 
@@ -380,20 +353,67 @@ class TimeShiftPage(QWidget):
         self.status_label.setText("状态：执行中")
         result = execute_time_shift(self.last_request, self.preview_records)
         self.status_label.setText("状态：执行完成")
-        self.result_text.setPlainText(
-            "执行完成\n"
-            f"- 总记录数：{result.total}\n"
-            f"- 成功：{result.succeeded}\n"
-            f"- 失败：{result.failed}\n"
-            f"- 跳过：{result.skipped}\n"
-            + self._format_execution_details(result.records)
-        )
+        self.result_text.setPlainText(self._execution_result_text(result))
         show_info(
             self,
             "执行完成",
             "时间修改已执行完成。成功 "
             f"{result.succeeded} 条，失败 {result.failed} 条，"
             f"跳过 {result.skipped} 条。",
+        )
+
+    def _build_request(self) -> TimeShiftRequest:
+        return build_time_shift_request(
+            selected_files=self.selected_files,
+            selected_directory=self.selected_directory,
+            offset_days=self.days_spin.value(),
+            offset_hours=self.hours_spin.value(),
+            offset_minutes=self.minutes_spin.value(),
+            offset_seconds=self.seconds_spin.value(),
+            update_created_at=self.update_created_checkbox.isChecked(),
+            update_modified_at=self.update_modified_checkbox.isChecked(),
+            update_taken_at=self.update_taken_checkbox.isChecked(),
+        )
+
+    def _populate_preview_table(
+        self, records: list[TimeShiftPreviewRecord]
+    ) -> None:
+        self.preview_table.setRowCount(len(records))
+        for row_index, record in enumerate(records):
+            for column_index, value in enumerate(self._record_to_row(record)):
+                item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.preview_table.setItem(row_index, column_index, item)
+
+    def _preview_summary_text(
+        self, executable_count: int, blocked_count: int
+    ) -> str:
+        return (
+            f"已生成 {len(self.preview_records)} 条预览记录，"
+            f"可执行 {executable_count} 条，不可执行 {blocked_count} 条。"
+        )
+
+    def _preview_result_text(
+        self, executable_count: int, blocked_count: int
+    ) -> str:
+        return (
+            "预览完成\n"
+            f"- 输入来源：{self._input_description()}\n"
+            f"- 偏移量：{self._offset_description()}\n"
+            f"- 修改字段：{self._field_description()}\n"
+            f"- 可执行：{executable_count}\n"
+            f"- 不可执行：{blocked_count}\n"
+            "- 执行阶段会逐文件处理，失败项不会中断整个任务。"
+        )
+
+    def _execution_result_text(self, result) -> str:
+        return (
+            "执行完成\n"
+            f"- 总记录数：{result.total}\n"
+            f"- 成功：{result.succeeded}\n"
+            f"- 失败：{result.failed}\n"
+            f"- 跳过：{result.skipped}\n"
+            + self._format_execution_details(result.records)
         )
 
     def _record_to_row(self, record: TimeShiftPreviewRecord) -> list[str]:

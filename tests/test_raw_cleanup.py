@@ -12,17 +12,15 @@ from src.tasks.raw_cleanup import (
 
 
 def test_preview_matches_by_case_insensitive_stem(tmp_path: Path) -> None:
-    selected_dir = tmp_path / "selected"
-    source_dir = tmp_path / "source"
-    selected_dir.mkdir()
-    source_dir.mkdir()
+    selected_dir, source_dir = _make_cleanup_directories(tmp_path)
     (selected_dir / "IMG_0001.JPG").write_bytes(b"selected")
     (source_dir / "img_0001.ARW").write_bytes(b"keep")
     (source_dir / "IMG_9999.NEF").write_bytes(b"cleanup")
+    # `.xmp` 不在 SUPPORTED_PHOTO_EXTENSIONS 中，因此不会计入 source_count。
     (source_dir / "IMG_0001.xmp").write_bytes(b"sidecar")
 
     preview = generate_cleanup_preview(
-        build_request(
+        make_raw_cleanup_request(
             selected_dir=selected_dir,
             source_dir=source_dir,
             delete_mode="trash",
@@ -45,17 +43,14 @@ def test_preview_matches_by_case_insensitive_stem(tmp_path: Path) -> None:
 def test_execute_cleanup_trashes_unmatched_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    selected_dir = tmp_path / "selected"
-    source_dir = tmp_path / "source"
-    selected_dir.mkdir()
-    source_dir.mkdir()
+    selected_dir, source_dir = _make_cleanup_directories(tmp_path)
     (selected_dir / "IMG_0001.JPG").write_bytes(b"selected")
     keep_path = source_dir / "IMG_0001.ARW"
     delete_path = source_dir / "IMG_9999.ARW"
     keep_path.write_bytes(b"keep")
     delete_path.write_bytes(b"delete")
 
-    request = build_request(
+    request = make_raw_cleanup_request(
         selected_dir=selected_dir,
         source_dir=source_dir,
         delete_mode="trash",
@@ -77,17 +72,14 @@ def test_execute_cleanup_trashes_unmatched_files(
 
 
 def test_execute_cleanup_permanently_deletes_unmatched_files(tmp_path: Path) -> None:
-    selected_dir = tmp_path / "selected"
-    source_dir = tmp_path / "source"
-    selected_dir.mkdir()
-    source_dir.mkdir()
+    selected_dir, source_dir = _make_cleanup_directories(tmp_path)
     (selected_dir / "IMG_0001.JPG").write_bytes(b"selected")
     keep_path = source_dir / "IMG_0001.ARW"
     delete_path = source_dir / "IMG_9999.ARW"
     keep_path.write_bytes(b"keep")
     delete_path.write_bytes(b"delete")
 
-    request = build_request(
+    request = make_raw_cleanup_request(
         selected_dir=selected_dir,
         source_dir=source_dir,
         delete_mode="permanent",
@@ -103,7 +95,7 @@ def test_execute_cleanup_permanently_deletes_unmatched_files(tmp_path: Path) -> 
     assert result.failed == 0
 
 
-def build_request(
+def make_raw_cleanup_request(
     *,
     selected_dir: Path,
     source_dir: Path,
@@ -114,3 +106,11 @@ def build_request(
         source_dir=source_dir,
         delete_mode=delete_mode,
     )
+
+
+def _make_cleanup_directories(tmp_path: Path) -> tuple[Path, Path]:
+    selected_dir = tmp_path / "selected"
+    source_dir = tmp_path / "source"
+    selected_dir.mkdir()
+    source_dir.mkdir()
+    return selected_dir, source_dir

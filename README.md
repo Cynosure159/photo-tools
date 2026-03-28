@@ -90,3 +90,7 @@ photo-tools/
 - 创建时间写入目前仅在 Windows 上实现；macOS 会在预览中明确标记为不可写入
 - EXIF 拍摄时间写入目前支持 `jpg/jpeg/tif/tiff`
 - 原片筛选按照片文件类型扫描，V1 默认不将 `.xmp` 等 sidecar 文件作为强制保留对象
+
+后续待办：
+
+- 评估并逐步扩展更多照片格式的元数据读写支持；重点关注 `png/heic/arw/cr2/nef/dng` 等当前仅支持扫描、暂不支持 EXIF 拍摄时间写入的格式

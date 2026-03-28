@@ -60,7 +60,7 @@ class RawCleanupPage(QWidget):
         )
         layout.addWidget(
             QLabel(
-                "按 basename 匹配，忽略扩展名。预览会展示保留与待处理文件，"
+                "按文件名主体匹配，忽略扩展名。预览会展示保留与待处理文件，"
                 "执行时按所选策略移动到回收站或永久删除。"
             )
         )
@@ -98,7 +98,7 @@ class RawCleanupPage(QWidget):
         self.delete_mode_combo.currentIndexChanged.connect(self._on_parameters_changed)
         strategy_layout.addRow("删除模式", self.delete_mode_combo)
 
-        self.rule_summary_label = QLabel("匹配规则：按 basename 匹配，忽略扩展名。")
+        self.rule_summary_label = QLabel("匹配规则：按文件名主体匹配，忽略扩展名。")
         self.rule_summary_label.setWordWrap(True)
         strategy_layout.addRow("匹配规则", self.rule_summary_label)
         layout.addWidget(strategy_box)
@@ -192,20 +192,16 @@ class RawCleanupPage(QWidget):
             self._refresh_actions()
 
     def _mark_preview_stale(self, status: str) -> None:
-        self.preview = None
-        self.status_label.setText(f"状态：{status}")
-        self.result_text.clear()
-        self.preview_summary_label.setText("当前预览已失效，请重新生成。")
-        self.preview_table.setRowCount(0)
-        self._refresh_actions()
+        self._reset_preview_state(
+            summary="当前预览已失效，请重新生成。",
+            status=f"状态：{status}",
+        )
 
     def _clear_preview(self, status: str) -> None:
-        self.preview = None
-        self.preview_table.setRowCount(0)
-        self.preview_summary_label.setText("生成预览后，将在这里展示保留和待处理列表。")
-        self.status_label.setText(status)
-        self.result_text.clear()
-        self._refresh_actions()
+        self._reset_preview_state(
+            summary="生成预览后，将在这里展示保留和待处理列表。",
+            status=status,
+        )
 
     def _generate_preview(self) -> None:
         if not self._preview_allowed():
@@ -258,6 +254,14 @@ class RawCleanupPage(QWidget):
             source_dir=self.source_dir,
             delete_mode=str(self.delete_mode_combo.currentData()),
         )
+
+    def _reset_preview_state(self, *, summary: str, status: str) -> None:
+        self.preview = None
+        self.preview_table.setRowCount(0)
+        self.preview_summary_label.setText(summary)
+        self.status_label.setText(status)
+        self.result_text.clear()
+        self._refresh_actions()
 
     def _has_executable_preview(self) -> bool:
         return self.preview is not None and self.preview.process_count > 0
@@ -313,7 +317,7 @@ class RawCleanupPage(QWidget):
 
     def _preview_next_step_message(self, preview: RawCleanupPreview) -> str:
         if preview.selected_count == 0:
-            return "- 当前成片目录未找到可识别照片，原片不会命中任何 basename。"
+            return "- 当前成片目录未找到可识别照片，原片不会命中任何文件名主体。"
         if preview.process_count == 0:
             return "- 当前预览下没有未匹配文件，不需要执行清理。"
         return "- 可继续点击“执行清理”进入二次确认。"

@@ -196,7 +196,9 @@ def _set_windows_creation_time(path: Path, value: datetime) -> None:
 
 def _datetime_to_filetime(value: datetime) -> wintypes.FILETIME:
     if value.tzinfo is None:
-        utc_value = value.astimezone()
+        local_timezone = datetime.now().astimezone().tzinfo
+        assert local_timezone is not None
+        utc_value = value.replace(tzinfo=local_timezone).astimezone(timezone.utc)
     else:
         utc_value = value.astimezone(timezone.utc)
     unix_time = utc_value.timestamp()

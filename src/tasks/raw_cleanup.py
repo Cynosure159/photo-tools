@@ -32,7 +32,7 @@ def build_raw_cleanup_request(
 def generate_cleanup_preview(request: RawCleanupRequest) -> RawCleanupPreview:
     selected_files = scan_photo_files(request.selected_dir)
     source_files = scan_photo_files(request.source_dir)
-    selected_stems = {path.stem.casefold() for path in selected_files}
+    selected_stems = _build_selected_stems(selected_files)
     records = tuple(
         _build_preview_record(
             path=path,
@@ -41,7 +41,7 @@ def generate_cleanup_preview(request: RawCleanupRequest) -> RawCleanupPreview:
         )
         for path in source_files
     )
-    keep_count = sum(record.matched for record in records)
+    keep_count = _count_matched_records(records)
     process_count = len(records) - keep_count
 
     return RawCleanupPreview(
@@ -108,8 +108,8 @@ def execute_cleanup(
 
 def _build_preview_message(path: Path, matched: bool) -> str:
     if matched:
-        return f"basename {path.stem} 已在成片目录中匹配。"
-    return f"basename {path.stem} 未在成片目录中匹配。"
+        return f"文件名主体 {path.stem} 已在成片目录中匹配。"
+    return f"文件名主体 {path.stem} 未在成片目录中匹配。"
 
 
 def _build_preview_record(
@@ -128,6 +128,14 @@ def _build_preview_record(
         planned_action=planned_action,
         message=_build_preview_message(path, matched),
     )
+
+
+def _build_selected_stems(paths: list[Path]) -> set[str]:
+    return {path.stem.casefold() for path in paths}
+
+
+def _count_matched_records(records: tuple[RawCleanupPreviewRecord, ...]) -> int:
+    return sum(record.matched for record in records)
 
 
 def _delete_action_label(delete_mode: str) -> str:

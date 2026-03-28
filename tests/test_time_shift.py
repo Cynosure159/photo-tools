@@ -20,12 +20,12 @@ from src.tasks.time_shift import (
 def test_preview_computes_modified_and_taken_offsets(tmp_path: Path) -> None:
     image_path = tmp_path / "sample.jpg"
     original_taken_at = datetime(2024, 5, 1, 12, 30, 0)
-    create_image(image_path, original_taken_at)
+    _create_image_helper(image_path, original_taken_at)
 
     original_modified_at = datetime(2024, 5, 2, 8, 0, 0)
-    set_modified_time(image_path, original_modified_at)
+    _set_modified_time_helper(image_path, original_modified_at)
 
-    request = build_request(
+    request = make_time_shift_request(
         image_path=image_path,
         offset=timedelta(days=1, hours=2, seconds=30),
     )
@@ -45,12 +45,12 @@ def test_preview_computes_modified_and_taken_offsets(tmp_path: Path) -> None:
 def test_execute_updates_modified_and_taken_times(tmp_path: Path) -> None:
     image_path = tmp_path / "execute.jpg"
     original_taken_at = datetime(2024, 6, 1, 7, 15, 0)
-    create_image(image_path, original_taken_at)
+    _create_image_helper(image_path, original_taken_at)
 
     original_modified_at = datetime(2024, 6, 2, 9, 0, 0)
-    set_modified_time(image_path, original_modified_at)
+    _set_modified_time_helper(image_path, original_modified_at)
 
-    request = build_request(
+    request = make_time_shift_request(
         image_path=image_path,
         offset=timedelta(hours=3, minutes=5),
     )
@@ -72,10 +72,10 @@ def test_execute_updates_modified_and_taken_times(tmp_path: Path) -> None:
 def test_build_request_preserves_day_offset_components(tmp_path: Path) -> None:
     image_path = tmp_path / "offset.jpg"
     original_taken_at = datetime(2024, 7, 1, 10, 0, 0)
-    create_image(image_path, original_taken_at)
+    _create_image_helper(image_path, original_taken_at)
 
     offset = timedelta(days=1, hours=2, minutes=30, seconds=45)
-    request = build_request(image_path=image_path, offset=offset)
+    request = make_time_shift_request(image_path=image_path, offset=offset)
 
     assert request.offset == offset
 
@@ -90,8 +90,8 @@ def test_execute_reports_writer_failure_without_aborting_batch(
     first_path = tmp_path / "first.jpg"
     second_path = tmp_path / "second.jpg"
     original_taken_at = datetime(2024, 8, 1, 9, 0, 0)
-    create_image(first_path, original_taken_at)
-    create_image(second_path, original_taken_at)
+    _create_image_helper(first_path, original_taken_at)
+    _create_image_helper(second_path, original_taken_at)
 
     request = build_time_shift_request(
         selected_files=[first_path, second_path],
@@ -107,7 +107,7 @@ def test_execute_reports_writer_failure_without_aborting_batch(
     preview = generate_preview(request)
 
     writer = Mock(side_effect=[PermissionError("只读文件"), None])
-    monkeypatch.setattr("src.tasks.time_shift.set_modified_time", writer)
+    monkeypatch.setattr("src.tasks.time_shift.photo_time.set_modified_time", writer)
 
     result = execute_time_shift(request, preview)
 
@@ -121,7 +121,7 @@ def test_execute_reports_writer_failure_without_aborting_batch(
     assert result.records[1].status == "成功"
 
 
-def create_image(path: Path, taken_at: datetime) -> None:
+def _create_image_helper(path: Path, taken_at: datetime) -> None:
     image = Image.new("RGB", (16, 16), color="red")
     encoded_taken_at = taken_at.strftime("%Y:%m:%d %H:%M:%S").encode("ascii")
     exif_bytes = piexif.dump(
@@ -139,12 +139,12 @@ def create_image(path: Path, taken_at: datetime) -> None:
     image.save(path, exif=exif_bytes)
 
 
-def set_modified_time(path: Path, value: datetime) -> None:
+def _set_modified_time_helper(path: Path, value: datetime) -> None:
     timestamp = value.timestamp()
     os.utime(path, (timestamp, timestamp))
 
 
-def build_request(*, image_path: Path, offset: timedelta):
+def make_time_shift_request(*, image_path: Path, offset: timedelta):
     total_offset_seconds = int(offset.total_seconds())
     sign = -1 if total_offset_seconds < 0 else 1
     absolute_seconds = abs(total_offset_seconds)
