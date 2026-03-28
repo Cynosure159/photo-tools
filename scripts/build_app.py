@@ -8,10 +8,12 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+APP_NAME = "photo-tools"
 ENTRYPOINT = PROJECT_ROOT / "src" / "app" / "main.py"
 DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 PYINSTALLER_CONFIG_DIR = PROJECT_ROOT / ".pyinstaller"
+ICONS_DIR = PROJECT_ROOT / "assets" / "icons"
 
 SUPPORTED_TARGETS = {
     "macos": {"arm64", "x86_64"},
@@ -57,10 +59,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_output_name(target_platform: str, target_arch: str) -> str:
-    return f"photo-tools-{target_platform}-{target_arch}"
-
-
 def validate_target(target_platform: str, target_arch: str) -> None:
     supported_arches = SUPPORTED_TARGETS.get(target_platform)
     if supported_arches is None or target_arch not in supported_arches:
@@ -76,13 +74,25 @@ def target_architecture_args(target_platform: str, target_arch: str) -> list[str
     return ["--target-architecture", target_arch]
 
 
+def icon_args(target_platform: str) -> list[str]:
+    icon_name = {
+        "macos": "app-icon.icns",
+        "windows": "app-icon.ico",
+    }[target_platform]
+    return ["--icon", str(ICONS_DIR / icon_name)]
+
+
+def data_args() -> list[str]:
+    source = ICONS_DIR / "app-icon.png"
+    return ["--add-data", f"{source}{os.pathsep}assets/icons"]
+
+
 def main() -> int:
     args = parse_args()
     validate_target(args.target_platform, args.target_arch)
 
     environment = os.environ.copy()
     environment["PYINSTALLER_CONFIG_DIR"] = str(PYINSTALLER_CONFIG_DIR)
-    output_name = build_output_name(args.target_platform, args.target_arch)
     build_dir = BUILD_DIR / f"{args.target_platform}-{args.target_arch}"
     dist_dir = DIST_DIR / f"{args.target_platform}-{args.target_arch}"
 
@@ -94,11 +104,13 @@ def main() -> int:
         "--clean",
         "--windowed",
         "--name",
-        output_name,
+        APP_NAME,
         "--distpath",
         str(dist_dir),
         "--workpath",
         str(build_dir),
+        *icon_args(args.target_platform),
+        *data_args(),
         *target_architecture_args(args.target_platform, args.target_arch),
         str(ENTRYPOINT),
     ]

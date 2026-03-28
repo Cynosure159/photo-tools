@@ -66,19 +66,19 @@ jobs:
             python-architecture: arm64
             target-platform: macos
             target-arch: arm64
-            artifact-path: dist/macos-arm64/photo-tools-macos-arm64.app
+            artifact-path: dist/macos-arm64/photo-tools.app
           - name: macos-x86_64
             os: macos-13
             python-architecture: x64
             target-platform: macos
             target-arch: x86_64
-            artifact-path: dist/macos-x86_64/photo-tools-macos-x86_64.app
+            artifact-path: dist/macos-x86_64/photo-tools.app
           - name: windows-x86
             os: windows-latest
             python-architecture: x86
             target-platform: windows
             target-arch: x86
-            artifact-path: dist/windows-x86/photo-tools-windows-x86
+            artifact-path: dist/windows-x86/photo-tools
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,7 +105,7 @@ jobs:
       - name: Verify Windows executable
         if: matrix.target-platform == 'windows'
         run: |
-          if (-not (Test-Path '${{ matrix.artifact-path }}/photo-tools-windows-x86.exe')) {
+          if (-not (Test-Path '${{ matrix.artifact-path }}/photo-tools.exe')) {
             throw 'Expected Windows executable to exist.'
           }
         shell: pwsh

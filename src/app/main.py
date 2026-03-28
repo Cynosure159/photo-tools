@@ -5,6 +5,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_VENV = PROJECT_ROOT / ".venv"
+ICON_RELATIVE_PATH = Path("assets/icons/app-icon.png")
 
 
 def ensure_project_venv() -> None:
@@ -23,10 +24,18 @@ def ensure_project_venv() -> None:
         )
 
 
+def resolve_runtime_path(relative_path: Path) -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / relative_path  # type: ignore[attr-defined]
+
+    return PROJECT_ROOT / relative_path
+
+
 def main() -> int:
     ensure_project_venv()
 
     try:
+        from PyQt6.QtGui import QIcon
         from PyQt6.QtWidgets import QApplication
     except ImportError as exc:
         raise RuntimeError(
@@ -38,7 +47,11 @@ def main() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("photo-tools")
+    icon_path = resolve_runtime_path(ICON_RELATIVE_PATH)
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     window = MainWindow()
+    window.setWindowIcon(app.windowIcon())
     window.show()
     return app.exec()
 
