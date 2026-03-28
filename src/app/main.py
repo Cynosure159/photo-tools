@@ -8,6 +8,9 @@ EXPECTED_VENV = PROJECT_ROOT / ".venv"
 
 
 def ensure_project_venv() -> None:
+    if getattr(sys, "frozen", False):
+        return
+
     current_prefix = Path(sys.prefix).resolve()
     expected_prefix = EXPECTED_VENV.resolve()
 

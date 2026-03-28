@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run ruff
+        run: ruff check .
+
+  test:
+    name: Pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run pytest
+        run: pytest
+
+  build:
+    name: Build app (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    needs:
+      - lint
+      - test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-14
+            python-architecture: arm64
+            target-platform: macos
+            target-arch: arm64
+            artifact-path: dist/macos-arm64/photo-tools-macos-arm64.app
+          - name: macos-x86_64
+            os: macos-13
+            python-architecture: x64
+            target-platform: macos
+            target-arch: x86_64
+            artifact-path: dist/macos-x86_64/photo-tools-macos-x86_64.app
+          - name: windows-x86
+            os: windows-latest
+            python-architecture: x86
+            target-platform: windows
+            target-arch: x86
+            artifact-path: dist/windows-x86/photo-tools-windows-x86
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.python-architecture }}
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Build application
+        run: >
+          python scripts/build_app.py
+          --platform ${{ matrix.target-platform }}
+          --arch ${{ matrix.target-arch }}
+
+      - name: Verify macOS app bundle
+        if: matrix.target-platform == 'macos'
+        run: test -d "${{ matrix.artifact-path }}"
+
+      - name: Verify Windows executable
+        if: matrix.target-platform == 'windows'
+        run: |
+          if (-not (Test-Path '${{ matrix.artifact-path }}/photo-tools-windows-x86.exe')) {
+            throw 'Expected Windows executable to exist.'
+          }
+        shell: pwsh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: photo-tools-${{ matrix.name }}
+          path: ${{ matrix.artifact-path }}

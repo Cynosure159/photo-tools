@@ -7,7 +7,8 @@
 - 建立项目基础设施
 - 统一 Python 运行环境
 - 搭建 GUI 骨架并跑通基础交互
-- 实现时间修改功能的真实扫描、预览与执行
+- 实现两个核心功能的真实扫描、预览与执行
+- 准备跨平台构建与持续集成能力
 
 ## 运行约束
 
@@ -45,10 +46,25 @@ ruff check .
 pytest
 ```
 
+本地构建应用：
+
+```bash
+python scripts/build_app.py
+```
+
+构建指定平台/架构的包：
+
+```bash
+python scripts/build_app.py --platform macos --arch arm64
+python scripts/build_app.py --platform macos --arch x86_64
+python scripts/build_app.py --platform windows --arch x86
+```
+
 约定：
 
 - 每次修改 Python 代码后，都需要在项目 `.venv` 中执行一次 `ruff check .`
 - 测试默认使用 `pytest`
+- 应用构建默认使用 `PyInstaller`
 - `ruff` 配置位于项目根目录的 [`pyproject.toml`](/Users/cy/Projects/photo-tools/pyproject.toml)
 
 ## 启动项目
@@ -90,6 +106,14 @@ photo-tools/
 - 创建时间写入目前仅在 Windows 上实现；macOS 会在预览中明确标记为不可写入
 - EXIF 拍摄时间写入目前支持 `jpg/jpeg/tif/tiff`
 - 原片筛选按照片文件类型扫描，V1 默认不将 `.xmp` 等 sidecar 文件作为强制保留对象
+
+持续集成与构建：
+
+- GitHub Actions 将执行 `ruff check .`
+- GitHub Actions 将执行 `pytest`
+- GitHub Actions 将验证 `macOS arm64`、`macOS x86_64` 和 `Windows x86` 构建
+- 本地默认按当前机器架构构建；你这台 macOS ARM 机器默认产出 `macOS arm64`
+- 构建产物默认输出到 `dist/<platform>-<arch>/`，中间产物输出到 `build/<platform>-<arch>/`
 
 后续待办：
 
