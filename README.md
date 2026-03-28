@@ -39,9 +39,16 @@ pip install -r requirements.txt
 ruff check .
 ```
 
+运行测试：
+
+```bash
+pytest
+```
+
 约定：
 
 - 每次修改 Python 代码后，都需要在项目 `.venv` 中执行一次 `ruff check .`
+- 测试默认使用 `pytest`
 - `ruff` 配置位于项目根目录的 [`pyproject.toml`](/Users/cy/Projects/photo-tools/pyproject.toml)
 
 ## 启动项目

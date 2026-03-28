@@ -19,5 +19,7 @@
 ## 开发规范
 
 - 项目使用 `ruff` 作为代码格式与静态检查工具。
+- 项目测试框架使用 `pytest`。
 - 每次修改 Python 代码后，必须在项目 `.venv` 中执行 `ruff check .`，确认通过后再结束本轮修改。
+- 修改测试或 Python 业务代码后，默认在项目 `.venv` 中执行 `pytest`，确认相关测试通过。
 - `ruff` 配置统一写在项目根目录的 [`pyproject.toml`](/Users/cy/Projects/photo-tools/pyproject.toml)。
