@@ -68,7 +68,7 @@ jobs:
             target-arch: arm64
             artifact-path: dist/macos-arm64/photo-tools.app
           - name: macos-x86_64
-            os: macos-13
+            os: macos-15-intel
             python-architecture: x64
             target-platform: macos
             target-arch: x86_64
