@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -22,6 +23,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.models.time_shift import TimeShiftPreviewRecord, TimeShiftRequest
+from src.tasks.time_shift import (
+    build_time_shift_request,
+    execute_time_shift,
+    generate_preview,
+)
 from src.ui.dialogs import confirm_time_shift, show_info, show_warning
 
 
@@ -32,6 +39,8 @@ class TimeShiftPage(QWidget):
         self.selected_files: list[Path] = []
         self.selected_directory: Path | None = None
         self.preview_ready = False
+        self.last_request: TimeShiftRequest | None = None
+        self.preview_records: list[TimeShiftPreviewRecord] = []
 
         root_layout = QVBoxLayout(self)
         root_layout.addWidget(self._build_intro())
@@ -43,6 +52,21 @@ class TimeShiftPage(QWidget):
 
         self._refresh_actions()
 
+    def _selected_field_checkboxes(self) -> tuple[QCheckBox, ...]:
+        return (
+            self.update_created_checkbox,
+            self.update_modified_checkbox,
+            self.update_taken_checkbox,
+        )
+
+    def _offset_spinboxes(self) -> tuple[QSpinBox, ...]:
+        return (
+            self.days_spin,
+            self.hours_spin,
+            self.minutes_spin,
+            self.seconds_spin,
+        )
+
     def _build_intro(self) -> QGroupBox:
         box = QGroupBox("批量修改照片时间")
         layout = QVBoxLayout(box)
@@ -51,9 +75,7 @@ class TimeShiftPage(QWidget):
                 "按“选择输入 -> 配置偏移 -> 生成预览 -> 二次确认 -> 执行”的流程工作。"
             )
         )
-        layout.addWidget(
-            QLabel("阶段 2 为 GUI 骨架，当前预览和结果仅用于承载交互与状态。")
-        )
+        layout.addWidget(QLabel("阶段 3 已接入真实扫描、预览和批量执行逻辑。"))
         return box
 
     def _build_controls(self) -> QGroupBox:
@@ -107,22 +129,13 @@ class TimeShiftPage(QWidget):
         self.update_modified_checkbox = QCheckBox("修改时间")
         self.update_taken_checkbox = QCheckBox("拍摄时间")
         self.update_modified_checkbox.setChecked(True)
-        for checkbox in (
-            self.update_created_checkbox,
-            self.update_modified_checkbox,
-            self.update_taken_checkbox,
-        ):
+        for checkbox in self._selected_field_checkboxes():
             checkbox.stateChanged.connect(self._on_parameters_changed)
             field_row.addWidget(checkbox)
         field_row.addStretch()
         config_layout.addRow("修改字段", field_row)
 
-        for spinbox in (
-            self.days_spin,
-            self.hours_spin,
-            self.minutes_spin,
-            self.seconds_spin,
-        ):
+        for spinbox in self._offset_spinboxes():
             spinbox.valueChanged.connect(self._on_parameters_changed)
 
         self.preview_button = QPushButton("生成预览")
@@ -195,7 +208,10 @@ class TimeShiftPage(QWidget):
             self,
             "选择待处理照片",
             "",
-            "Images (*.jpg *.jpeg *.png *.heic *.tif *.tiff *.arw *.cr2 *.nef *.dng);;All Files (*)",
+            (
+                "Images (*.jpg *.jpeg *.png *.heic *.tif *.tiff *.arw *.cr2 *.nef"
+                " *.dng);;All Files (*)"
+            ),
         )
         if not files:
             return
@@ -228,7 +244,9 @@ class TimeShiftPage(QWidget):
         if self.selected_files:
             for file_path in self.selected_files:
                 QListWidgetItem(str(file_path), self.selected_list)
-            self.input_summary_label.setText(f"已选择 {len(self.selected_files)} 个文件。")
+            self.input_summary_label.setText(
+                f"已选择 {len(self.selected_files)} 个文件。"
+            )
             return
 
         if self.selected_directory is not None:
@@ -242,31 +260,21 @@ class TimeShiftPage(QWidget):
 
     def _has_selected_fields(self) -> bool:
         return any(
-            checkbox.isChecked()
-            for checkbox in (
-                self.update_created_checkbox,
-                self.update_modified_checkbox,
-                self.update_taken_checkbox,
-            )
+            checkbox.isChecked() for checkbox in self._selected_field_checkboxes()
         )
 
     def _has_offset(self) -> bool:
-        return any(
-            spinbox.value() != 0
-            for spinbox in (
-                self.days_spin,
-                self.hours_spin,
-                self.minutes_spin,
-                self.seconds_spin,
-            )
-        )
+        return any(spinbox.value() != 0 for spinbox in self._offset_spinboxes())
 
     def _preview_allowed(self) -> bool:
         return self._has_input() and self._has_selected_fields() and self._has_offset()
 
     def _refresh_actions(self) -> None:
         self.preview_button.setEnabled(self._preview_allowed())
-        self.execute_button.setEnabled(self.preview_ready)
+        self.execute_button.setEnabled(
+            self.preview_ready
+            and any(record.status == "待执行" for record in self.preview_records)
+        )
 
     def _on_parameters_changed(self) -> None:
         if self.preview_ready:
@@ -275,14 +283,14 @@ class TimeShiftPage(QWidget):
             self._refresh_actions()
 
     def _mark_preview_stale(self, status: str) -> None:
-        self.preview_ready = False
+        self._reset_preview_state()
         self.status_label.setText(f"状态：{status}")
         self.result_text.clear()
         self.preview_summary_label.setText("当前预览已失效，请重新生成。")
         self._refresh_actions()
 
     def _clear_preview(self, status: str) -> None:
-        self.preview_ready = False
+        self._reset_preview_state()
         self.preview_table.setRowCount(0)
         self.preview_summary_label.setText("生成预览后，将在这里展示逐文件对比。")
         self.status_label.setText(status)
@@ -291,10 +299,32 @@ class TimeShiftPage(QWidget):
 
     def _generate_preview(self) -> None:
         if not self._preview_allowed():
-            show_warning(self, "参数不完整", "请先选择输入、勾选至少一个字段，并设置非零偏移量。")
+            show_warning(
+                self,
+                "参数不完整",
+                "请先选择输入、勾选至少一个字段，并设置非零偏移量。",
+            )
             return
 
-        rows = self._build_preview_rows()
+        request = build_time_shift_request(
+            selected_files=self.selected_files,
+            selected_directory=self.selected_directory,
+            offset_days=self.days_spin.value(),
+            offset_hours=self.hours_spin.value(),
+            offset_minutes=self.minutes_spin.value(),
+            offset_seconds=self.seconds_spin.value(),
+            update_created_at=self.update_created_checkbox.isChecked(),
+            update_modified_at=self.update_modified_checkbox.isChecked(),
+            update_taken_at=self.update_taken_checkbox.isChecked(),
+        )
+        if not request.paths:
+            self._clear_preview("状态：未找到可处理照片")
+            show_warning(self, "未找到照片", "所选文件夹中没有可处理的照片文件。")
+            return
+
+        self.last_request = request
+        self.preview_records = generate_preview(request)
+        rows = [self._record_to_row(record) for record in self.preview_records]
         self.preview_table.setRowCount(len(rows))
 
         for row_index, row_values in enumerate(rows):
@@ -304,8 +334,10 @@ class TimeShiftPage(QWidget):
                 self.preview_table.setItem(row_index, column_index, item)
 
         self.preview_ready = True
+        executable_count, blocked_count = self._preview_counts()
         self.preview_summary_label.setText(
-            f"已生成 {len(rows)} 条预览记录。当前为阶段 2 占位数据，用于验证界面流转。"
+            f"已生成 {len(rows)} 条预览记录，"
+            f"可执行 {executable_count} 条，不可执行 {blocked_count} 条。"
         )
         self.status_label.setText("状态：预览已生成，等待确认执行")
         self.result_text.setPlainText(
@@ -313,74 +345,77 @@ class TimeShiftPage(QWidget):
             f"- 输入来源：{self._input_description()}\n"
             f"- 偏移量：{self._offset_description()}\n"
             f"- 修改字段：{self._field_description()}\n"
-            "- 下一步可点击“执行修改”验证确认链路。"
+            f"- 可执行：{executable_count}\n"
+            f"- 不可执行：{blocked_count}\n"
+            "- 执行阶段会逐文件处理，失败项不会中断整个任务。"
         )
         self._refresh_actions()
 
-    def _build_preview_rows(self) -> list[list[str]]:
-        targets: list[tuple[str, str]]
-
-        if self.selected_files:
-            targets = [(path.name, str(path)) for path in self.selected_files]
-        else:
-            assert self.selected_directory is not None
-            targets = [
-                (
-                    "目录扫描占位.jpg",
-                    str(self.selected_directory / "目录扫描占位.jpg"),
-                )
-            ]
-
-        rows: list[list[str]] = []
-        for index, (name, path) in enumerate(targets, start=1):
-            created_before = f"2024-05-{index:02d} 10:00:00"
-            modified_before = f"2024-05-{index:02d} 10:05:00"
-            taken_before = "2024-05-01 09:30:00" if self.update_taken_checkbox.isChecked() else "不修改"
-            rows.append(
-                [
-                    name,
-                    path,
-                    created_before,
-                    self._after_value(created_before, self.update_created_checkbox.isChecked()),
-                    modified_before,
-                    self._after_value(modified_before, self.update_modified_checkbox.isChecked()),
-                    taken_before if self.update_taken_checkbox.isChecked() else "不修改",
-                    self._after_value("2024-05-01 09:30:00", self.update_taken_checkbox.isChecked()),
-                    "待执行",
-                    "阶段 2 占位预览",
-                ]
-            )
-
-        return rows
-
-    def _after_value(self, before: str, enabled: bool) -> str:
-        return f"{before} {self._offset_description()}" if enabled else "不修改"
-
     def _execute(self) -> None:
-        if not self.preview_ready:
+        if not self.preview_ready or self.last_request is None:
             show_warning(self, "尚未预览", "请先生成预览，再执行修改。")
             return
 
+        executable_count, _ = self._preview_counts()
+        if executable_count == 0:
+            show_warning(
+                self,
+                "没有可执行项",
+                "当前预览中的文件都不可执行，请调整字段或输入后重试。",
+            )
+            return
         summary = (
             f"输入来源：{self._input_description()}\n"
             f"偏移量：{self._offset_description()}\n"
             f"修改字段：{self._field_description()}\n"
-            f"预览记录：{self.preview_table.rowCount()} 条"
+            f"预览记录：{self.preview_table.rowCount()} 条\n"
+            f"可执行：{executable_count} 条"
         )
         if not confirm_time_shift(self, summary):
             self.status_label.setText("状态：用户取消执行")
             return
 
-        self.status_label.setText("状态：已完成骨架阶段的执行演示")
+        self.status_label.setText("状态：执行中")
+        result = execute_time_shift(self.last_request, self.preview_records)
+        self.status_label.setText("状态：执行完成")
         self.result_text.setPlainText(
-            "执行完成（骨架演示）\n"
-            f"- 总记录数：{self.preview_table.rowCount()}\n"
-            f"- 成功：{self.preview_table.rowCount()}\n"
-            "- 失败：0\n"
-            "- 跳过：0\n"
-            "- 当前阶段未写入真实文件，仅验证了确认与结果展示链路。"
+            "执行完成\n"
+            f"- 总记录数：{result.total}\n"
+            f"- 成功：{result.succeeded}\n"
+            f"- 失败：{result.failed}\n"
+            f"- 跳过：{result.skipped}\n"
+            + self._format_execution_details(result.records)
         )
-        show_info(self, "执行完成", "阶段 2 的时间修改页已完成确认与结果展示骨架。")
+        show_info(
+            self,
+            "执行完成",
+            "时间修改已执行完成。成功 "
+            f"{result.succeeded} 条，失败 {result.failed} 条，"
+            f"跳过 {result.skipped} 条。",
+        )
+
+    def _record_to_row(self, record: TimeShiftPreviewRecord) -> list[str]:
+        return [
+            record.name,
+            str(record.path),
+            self._format_datetime(record.before_created_at),
+            self._format_datetime(
+                record.after_created_at,
+                enabled=self.update_created_checkbox.isChecked(),
+            ),
+            self._format_datetime(record.before_modified_at),
+            self._format_datetime(
+                record.after_modified_at,
+                enabled=self.update_modified_checkbox.isChecked(),
+            ),
+            self._format_datetime(record.before_taken_at),
+            self._format_datetime(
+                record.after_taken_at,
+                enabled=self.update_taken_checkbox.isChecked(),
+            ),
+            record.status,
+            record.message,
+        ]
 
     def _input_description(self) -> str:
         if self.selected_files:
@@ -411,3 +446,38 @@ class TimeShiftPage(QWidget):
         if self.update_taken_checkbox.isChecked():
             labels.append("拍摄时间")
         return "、".join(labels) if labels else "未选择"
+
+    def _format_datetime(
+        self,
+        value: datetime | None,
+        *,
+        enabled: bool = True,
+    ) -> str:
+        if not enabled:
+            return "不修改"
+        if value is None:
+            return "-"
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _reset_preview_state(self) -> None:
+        self.preview_ready = False
+        self.last_request = None
+        self.preview_records = []
+
+    def _preview_counts(self) -> tuple[int, int]:
+        executable_count = sum(
+            1 for record in self.preview_records if record.status == "待执行"
+        )
+        blocked_count = len(self.preview_records) - executable_count
+        return executable_count, blocked_count
+
+    def _format_execution_details(self, records: tuple) -> str:
+        lines: list[str] = []
+        for record in records:
+            if record.status == "成功":
+                continue
+            lines.append(f"- {record.path.name}：{record.status}，{record.message}")
+
+        if not lines:
+            return "\n- 所有可执行文件均已按预览结果完成写入。"
+        return "\n- 异常与跳过项：\n" + "\n".join(lines)

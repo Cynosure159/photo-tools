@@ -44,11 +44,14 @@ class RawCleanupPage(QWidget):
         layout = QVBoxLayout(box)
         layout.addWidget(
             QLabel(
-                "按“成片目录 -> 原片目录 -> 删除策略 -> 预览 -> 二次确认 -> 执行”的流程工作。"
+                "按“成片目录 -> 原片目录 -> 删除策略 -> 预览 -> 二次确认 -> 执行”"
+                "的流程工作。"
             )
         )
         layout.addWidget(
-            QLabel("阶段 2 先搭好高风险操作的交互骨架，真实匹配与删除逻辑留到后续阶段。")
+            QLabel(
+                "阶段 2 先搭好高风险操作的交互骨架，真实匹配与删除逻辑留到后续阶段。"
+            )
         )
         return box
 
@@ -108,7 +111,9 @@ class RawCleanupPage(QWidget):
 
         preview_box = QGroupBox("预览结果")
         preview_layout = QVBoxLayout(preview_box)
-        self.preview_summary_label = QLabel("生成预览后，将在这里展示保留和待处理列表。")
+        self.preview_summary_label = QLabel(
+            "生成预览后，将在这里展示保留和待处理列表。"
+        )
         self.preview_summary_label.setWordWrap(True)
         preview_layout.addWidget(self.preview_summary_label)
 
@@ -205,7 +210,8 @@ class RawCleanupPage(QWidget):
 
         self.preview_ready = True
         self.preview_summary_label.setText(
-            f"已生成 {len(rows)} 条预览记录。当前为阶段 2 占位数据，用于验证保留/清理界面流转。"
+            f"已生成 {len(rows)} 条预览记录。"
+            "当前为阶段 2 占位数据，用于验证保留/清理界面流转。"
         )
         self.status_label.setText("状态：预览已生成，等待确认执行")
         self.result_text.setPlainText(

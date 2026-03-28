@@ -15,3 +15,9 @@
 - 所有高风险操作必须遵循“先预览，再执行，再展示结果”的流程。
 - 删除类操作必须提供二次确认，且永久删除要有更强提示。
 - 实现阶段默认兼顾 macOS 与 Windows，并明确处理平台差异带来的文件时间与回收站行为问题。
+
+## 开发规范
+
+- 项目使用 `ruff` 作为代码格式与静态检查工具。
+- 每次修改 Python 代码后，必须在项目 `.venv` 中执行 `ruff check .`，确认通过后再结束本轮修改。
+- `ruff` 配置统一写在项目根目录的 [`pyproject.toml`](/Users/cy/Projects/photo-tools/pyproject.toml)。
