@@ -111,7 +111,7 @@ photo-tools/
 
 - GitHub Actions 将执行 `ruff check .`
 - GitHub Actions 将执行 `pytest`
-- GitHub Actions 将验证 `macOS arm64`、`macOS x86_64` 和 `Windows x86` 构建
+- GitHub Actions 将验证 `macOS arm64`、`macOS x86_64` 和 `Windows x64` 构建
 - 本地默认按当前机器架构构建；你这台 macOS ARM 机器默认产出 `macOS arm64`
 - 构建产物默认输出到 `dist/<platform>-<arch>/`，中间产物输出到 `build/<platform>-<arch>/`
 - 应用包名固定为 `photo-tools.app` 或 `photo-tools.exe`，平台架构信息只保留在目录名和 CI artifact 名中

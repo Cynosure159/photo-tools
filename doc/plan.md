@@ -146,7 +146,7 @@
 完成标准：
 
 - 开发者可在项目 `.venv` 中执行统一命令完成构建
-- `macOS arm64`、`macOS x86_64` 与 `Windows x86` 都有明确产物
+- `macOS arm64`、`macOS x86_64` 与 `Windows x64` 都有明确产物
 - 打包后的应用不会再依赖项目 `.venv` 运行约束
 
 ### 阶段七：GitHub Actions 持续集成
@@ -168,7 +168,7 @@
 
 - 在 `push` 与 `pull_request` 上自动执行代码检查
 - 在支持平台上自动执行测试
-- 在支持平台上自动执行 `macOS arm64`、`macOS x86_64` 与 `Windows x86` 构建验证并产出构建产物
+- 在支持平台上自动执行 `macOS arm64`、`macOS x86_64` 与 `Windows x64` 构建验证并产出构建产物
 
 ## 4. 优先级
 
@@ -260,7 +260,7 @@
 
 - `macOS arm64` 可生成 `.app`
 - `macOS x86_64` 可生成 `.app`
-- `Windows x86` 可生成 `.exe`
+- `Windows x64` 可生成 `.exe`
 - 本地构建方式固定
 
 ### M6：持续集成可用

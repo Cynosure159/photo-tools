@@ -17,7 +17,7 @@ ICONS_DIR = PROJECT_ROOT / "assets" / "icons"
 
 SUPPORTED_TARGETS = {
     "macos": {"arm64", "x86_64"},
-    "windows": {"x86"},
+    "windows": {"x64"},
 }
 
 
@@ -31,7 +31,7 @@ def detect_default_target() -> tuple[str, str]:
         if machine in {"x86_64", "amd64"}:
             return ("macos", "x86_64")
     elif system == "Windows":
-        return ("windows", "x86")
+        return ("windows", "x64")
 
     raise RuntimeError(
         f"Unsupported host platform for app builds: {system} / {machine}"
@@ -65,6 +65,14 @@ def validate_target(target_platform: str, target_arch: str) -> None:
         raise RuntimeError(
             f"Unsupported build target: {target_platform}/{target_arch}. "
             f"Supported targets: {SUPPORTED_TARGETS}."
+        )
+
+    host_platform, _ = detect_default_target()
+    if target_platform != host_platform:
+        raise RuntimeError(
+            "Cross-platform PyInstaller builds are not supported. "
+            f"Host platform is {host_platform}, but target platform is "
+            f"{target_platform}."
         )
 
 

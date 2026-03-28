@@ -73,12 +73,12 @@ jobs:
             target-platform: macos
             target-arch: x86_64
             artifact-path: dist/macos-x86_64/photo-tools.app
-          - name: windows-x86
+          - name: windows-x64
             os: windows-latest
-            python-architecture: x86
+            python-architecture: x64
             target-platform: windows
-            target-arch: x86
-            artifact-path: dist/windows-x86/photo-tools
+            target-arch: x64
+            artifact-path: dist/windows-x64/photo-tools
     steps:
       - name: Checkout
         uses: actions/checkout@v4
