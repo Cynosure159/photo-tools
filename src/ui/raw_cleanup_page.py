@@ -18,6 +18,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from src.models.raw_cleanup import (
+    RawCleanupExecutionResult,
+    RawCleanupPreview,
+    RawCleanupPreviewRecord,
+)
+from src.tasks.raw_cleanup import (
+    build_raw_cleanup_request,
+    execute_cleanup,
+    generate_cleanup_preview,
+)
 from src.ui.dialogs import confirm_cleanup, show_info, show_warning
 
 
@@ -27,7 +37,7 @@ class RawCleanupPage(QWidget):
 
         self.selected_dir: Path | None = None
         self.source_dir: Path | None = None
-        self.preview_ready = False
+        self.preview: RawCleanupPreview | None = None
 
         root_layout = QVBoxLayout(self)
         root_layout.addWidget(self._build_intro())
@@ -50,7 +60,8 @@ class RawCleanupPage(QWidget):
         )
         layout.addWidget(
             QLabel(
-                "阶段 2 先搭好高风险操作的交互骨架，真实匹配与删除逻辑留到后续阶段。"
+                "按 basename 匹配，忽略扩展名。预览会展示保留与待处理文件，"
+                "执行时按所选策略移动到回收站或永久删除。"
             )
         )
         return box
@@ -172,23 +183,24 @@ class RawCleanupPage(QWidget):
 
     def _refresh_actions(self) -> None:
         self.preview_button.setEnabled(self._preview_allowed())
-        self.execute_button.setEnabled(self.preview_ready)
+        self.execute_button.setEnabled(self._has_executable_preview())
 
     def _on_parameters_changed(self) -> None:
-        if self.preview_ready:
+        if self.preview is not None:
             self._mark_preview_stale("策略已变化，请重新生成预览。")
         else:
             self._refresh_actions()
 
     def _mark_preview_stale(self, status: str) -> None:
-        self.preview_ready = False
+        self.preview = None
         self.status_label.setText(f"状态：{status}")
         self.result_text.clear()
         self.preview_summary_label.setText("当前预览已失效，请重新生成。")
+        self.preview_table.setRowCount(0)
         self._refresh_actions()
 
     def _clear_preview(self, status: str) -> None:
-        self.preview_ready = False
+        self.preview = None
         self.preview_table.setRowCount(0)
         self.preview_summary_label.setText("生成预览后，将在这里展示保留和待处理列表。")
         self.status_label.setText(status)
@@ -200,59 +212,16 @@ class RawCleanupPage(QWidget):
             show_warning(self, "参数不完整", "请先选择成片目录和原片目录。")
             return
 
-        rows = self._build_preview_rows()
-        self.preview_table.setRowCount(len(rows))
-        for row_index, row_values in enumerate(rows):
-            for column_index, value in enumerate(row_values):
-                item = QTableWidgetItem(value)
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.preview_table.setItem(row_index, column_index, item)
-
-        self.preview_ready = True
-        self.preview_summary_label.setText(
-            f"已生成 {len(rows)} 条预览记录。"
-            "当前为阶段 2 占位数据，用于验证保留/清理界面流转。"
-        )
-        self.status_label.setText("状态：预览已生成，等待确认执行")
-        self.result_text.setPlainText(
-            "预览完成\n"
-            f"- 成片目录：{self.selected_dir}\n"
-            f"- 原片目录：{self.source_dir}\n"
-            f"- 删除模式：{self._delete_mode_label()}\n"
-            "- 下一步可点击“执行清理”验证高风险操作的确认链路。"
-        )
+        preview = generate_cleanup_preview(self._build_request())
+        self.preview = preview
+        self._populate_preview_table(preview.records)
+        self.preview_summary_label.setText(self._preview_summary_text(preview))
+        self.status_label.setText(self._preview_status(preview))
+        self.result_text.setPlainText(self._preview_result_text(preview))
         self._refresh_actions()
 
-    def _build_preview_rows(self) -> list[list[str]]:
-        assert self.selected_dir is not None
-        assert self.source_dir is not None
-
-        keep_name = "IMG_0001.ARW"
-        process_name = "IMG_9999.ARW"
-        action = (
-            "移动到回收站"
-            if self.delete_mode_combo.currentData() == "trash"
-            else "永久删除"
-        )
-        return [
-            [
-                keep_name,
-                str(self.source_dir / keep_name),
-                "已匹配",
-                "保留",
-                "与成片 IMG_0001.jpg basename 匹配",
-            ],
-            [
-                process_name,
-                str(self.source_dir / process_name),
-                "未匹配",
-                action,
-                "阶段 2 占位预览",
-            ],
-        ]
-
     def _execute(self) -> None:
-        if not self.preview_ready:
+        if self.preview is None:
             show_warning(self, "尚未预览", "请先生成预览，再执行清理。")
             return
 
@@ -260,7 +229,8 @@ class RawCleanupPage(QWidget):
             f"成片目录：{self.selected_dir}\n"
             f"原片目录：{self.source_dir}\n"
             f"删除模式：{self._delete_mode_label()}\n"
-            f"预览记录：{self.preview_table.rowCount()} 条"
+            f"预览记录：{len(self.preview.records)} 条\n"
+            f"待处理：{self.preview.process_count} 条"
         )
         if not confirm_cleanup(
             self,
@@ -270,16 +240,99 @@ class RawCleanupPage(QWidget):
             self.status_label.setText("状态：用户取消执行")
             return
 
-        self.status_label.setText("状态：已完成骨架阶段的执行演示")
-        self.result_text.setPlainText(
-            "执行完成（骨架演示）\n"
-            f"- 总记录数：{self.preview_table.rowCount()}\n"
-            "- 保留：1\n"
-            "- 已处理：1\n"
-            "- 失败：0\n"
-            "- 当前阶段未移动或删除真实文件，仅验证了确认与结果展示链路。"
-        )
-        show_info(self, "执行完成", "阶段 2 的原片筛选页已完成确认与结果展示骨架。")
+        result = execute_cleanup(self._build_request(), self.preview)
+        self.status_label.setText("状态：执行完成")
+        self.result_text.setPlainText(self._execution_result_text(result))
+        show_info(self, "执行完成", "原片清理已完成，请查看结果摘要。")
+        self.preview = None
+        self._refresh_actions()
 
     def _delete_mode_label(self) -> str:
         return str(self.delete_mode_combo.currentText())
+
+    def _build_request(self):
+        assert self.selected_dir is not None
+        assert self.source_dir is not None
+        return build_raw_cleanup_request(
+            selected_dir=self.selected_dir,
+            source_dir=self.source_dir,
+            delete_mode=str(self.delete_mode_combo.currentData()),
+        )
+
+    def _has_executable_preview(self) -> bool:
+        return self.preview is not None and self.preview.process_count > 0
+
+    def _preview_row_values(self, row: RawCleanupPreviewRecord) -> list[str]:
+        return [
+            row.name,
+            str(row.path),
+            "已匹配" if row.matched else "未匹配",
+            row.planned_action,
+            row.message,
+        ]
+
+    def _populate_preview_table(
+        self, records: tuple[RawCleanupPreviewRecord, ...]
+    ) -> None:
+        self.preview_table.setRowCount(len(records))
+        for row_index, row in enumerate(records):
+            for column_index, value in enumerate(self._preview_row_values(row)):
+                item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.preview_table.setItem(row_index, column_index, item)
+
+    def _preview_summary_text(self, preview: RawCleanupPreview) -> str:
+        return (
+            "预览已生成："
+            f" 成片 {preview.selected_count} 个，原片 {preview.source_count} 个，"
+            f"保留 {preview.keep_count} 个，待处理 {preview.process_count} 个。"
+        )
+
+    def _preview_status(self, preview: RawCleanupPreview) -> str:
+        if preview.selected_count == 0:
+            return "状态：成片目录中未识别到可匹配文件"
+        if preview.source_count == 0:
+            return "状态：原片目录中未识别到可处理文件"
+        if preview.process_count == 0:
+            return "状态：预览已生成，无需清理"
+        return "状态：预览已生成，等待确认执行"
+
+    def _preview_result_text(self, preview: RawCleanupPreview) -> str:
+        lines = [
+            "预览完成",
+            f"- 成片目录：{self.selected_dir}",
+            f"- 原片目录：{self.source_dir}",
+            f"- 删除模式：{self._delete_mode_label()}",
+            f"- 成片识别数量：{preview.selected_count}",
+            f"- 原片扫描数量：{preview.source_count}",
+            f"- 将保留：{preview.keep_count}",
+            f"- 将处理：{preview.process_count}",
+        ]
+        lines.append(self._preview_next_step_message(preview))
+        return "\n".join(lines)
+
+    def _preview_next_step_message(self, preview: RawCleanupPreview) -> str:
+        if preview.selected_count == 0:
+            return "- 当前成片目录未找到可识别照片，原片不会命中任何 basename。"
+        if preview.process_count == 0:
+            return "- 当前预览下没有未匹配文件，不需要执行清理。"
+        return "- 可继续点击“执行清理”进入二次确认。"
+
+    def _execution_result_text(self, result: RawCleanupExecutionResult) -> str:
+        lines = [
+            "执行完成",
+            f"- 总记录数：{result.total}",
+            f"- 保留：{result.kept}",
+            f"- 实际处理：{result.processed}",
+            f"- 成功：{result.succeeded}",
+            f"- 失败：{result.failed}",
+        ]
+        failed_records = [
+            record for record in result.records if record.status == "失败"
+        ]
+        if failed_records:
+            lines.append("- 失败项：")
+            lines.extend(
+                f"  - {record.path.name}：{record.message}" for record in failed_records
+            )
+        return "\n".join(lines)

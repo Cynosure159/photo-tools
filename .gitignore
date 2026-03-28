@@ -14,6 +14,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Review
+.test/
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -16,9 +16,7 @@ def confirm_time_shift(parent: QWidget, summary: str) -> bool:
         QMessageBox.question(
             parent,
             "确认执行时间修改",
-            "请确认将按预览结果批量修改照片时间。\n\n"
-            f"{summary}\n\n"
-            "阶段 2 仅提供交互骨架，尚未写入实际文件。",
+            f"请确认将按预览结果批量修改照片时间。\n\n{summary}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -28,7 +26,7 @@ def confirm_time_shift(parent: QWidget, summary: str) -> bool:
 
 def confirm_cleanup(parent: QWidget, summary: str, permanent_delete: bool) -> bool:
     warning = (
-        "你选择了永久删除模式。后续真实实现中该操作不可恢复，请再次确认。"
+        "你选择了永久删除模式。该操作不可恢复，请再次确认。"
         if permanent_delete
         else "你选择了移动到回收站模式。"
     )
@@ -37,7 +35,7 @@ def confirm_cleanup(parent: QWidget, summary: str, permanent_delete: bool) -> bo
         QMessageBox.question(
             parent,
             "确认执行原片清理",
-            f"{warning}\n\n{summary}\n\n阶段 2 仅提供交互骨架，尚未处理真实文件。",
+            f"{warning}\n\n{summary}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
