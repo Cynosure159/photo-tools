@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import piexif
-from PIL import Image
 
 SUPPORTED_PHOTO_EXTENSIONS = {
     ".jpg",
@@ -90,13 +89,14 @@ def set_taken_time(path: Path, value: datetime) -> None:
         exif_dict = _empty_exif_dict()
 
     exif_bytes = _build_exif_bytes(exif_dict, value)
-    with Image.open(path) as image:
-        image.save(path, exif=exif_bytes)
+    piexif.insert(exif_bytes, str(path))
 
 
 def _read_created_time(stat_result: os.stat_result) -> datetime | None:
     if hasattr(stat_result, "st_birthtime"):
-        return datetime.fromtimestamp(stat_result.st_birthtime)
+        birthtime = stat_result.st_birthtime
+        if birthtime is not None:
+            return datetime.fromtimestamp(birthtime)
     if platform.system() == "Windows":
         return datetime.fromtimestamp(stat_result.st_ctime)
     return None

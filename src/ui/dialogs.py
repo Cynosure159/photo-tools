@@ -26,18 +26,18 @@ def confirm_time_shift(parent: QWidget, summary: str) -> bool:
 
 def confirm_cleanup(parent: QWidget, summary: str, permanent_delete: bool) -> bool:
     warning = (
-        "你选择了永久删除模式。该操作不可恢复，请再次确认。"
+        "你选择了永久删除模式。该操作不可恢复，且会直接删除文件，请再次确认。"
         if permanent_delete
         else "你选择了移动到回收站模式。"
     )
-
-    return (
-        QMessageBox.question(
-            parent,
-            "确认执行原片清理",
-            f"{warning}\n\n{summary}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        == QMessageBox.StandardButton.Yes
+    dialog = QMessageBox(parent)
+    dialog.setWindowTitle("确认执行原片清理")
+    dialog.setText(f"{warning}\n\n{summary}")
+    dialog.setIcon(
+        QMessageBox.Icon.Warning if permanent_delete else QMessageBox.Icon.Question
     )
+    dialog.setStandardButtons(
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+    )
+    dialog.setDefaultButton(QMessageBox.StandardButton.No)
+    return dialog.exec() == QMessageBox.StandardButton.Yes

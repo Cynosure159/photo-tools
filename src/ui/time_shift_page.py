@@ -75,7 +75,9 @@ class TimeShiftPage(QWidget):
                 "按“选择输入 -> 配置偏移 -> 生成预览 -> 二次确认 -> 执行”的流程工作。"
             )
         )
-        layout.addWidget(QLabel("阶段 3 已接入真实扫描、预览和批量执行逻辑。"))
+        layout.addWidget(
+            QLabel("支持按当前预览结果批量写入照片时间信息。")
+        )
         return box
 
     def _build_controls(self) -> QGroupBox:
